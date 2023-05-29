@@ -1,0 +1,123 @@
+Create DATABASE CRM_DATA;
+
+create SCHEMA CRM_DATA.SCH_LANDING;
+
+CREATE OR REPLACE EXTERNAL TABLE CRM_DATA.PUBLIC.CUSTOMER(
+ID INT,
+Name STRING,
+Address STRING,
+City STRING,
+PostCode INT,
+State INT,
+Company STRING,
+Contact NUMBER
+);
+select *from CUSTOMER
+
+--Create a Cloud Storage Integration in Snowflake
+CREATE STORAGE INTEGRATION azure_int
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'AZURE'
+  ENABLED = TRUE
+  AZURE_TENANT_ID = 'a123b4c5-1234-123a-a12b-1a23b45678c9'
+  STORAGE_ALLOWED_LOCATIONS = ('azure://myaccount.blob.core.windows.net/mycontainer1/mypath1/', 'azure://myaccount.blob.core.windows.net/mycontainer2/mypath2/')
+  
+  STORAGE_BLOCKED_LOCATIONS = ('azure://myaccount.blob.core.windows.net/mycontainer1/mypath1/sensitivedata/', 'azure://myaccount.blob.core.windows.net/mycontainer2/mypath2/sensitivedata/');
+
+
+
+  --drop STORAGE INTEGRATION Azr_intigration;
+  
+  --Create a Cloud Storage Integration in Snowflake
+  CREATE STORAGE INTEGRATION Azr_intigration
+  TYPE = EXTERNAL_STAGE
+  STORAGE_PROVIDER = 'AZURE'
+  ENABLED = TRUE
+  AZURE_TENANT_ID = '3729b040-caed-4a8b-b299-2f736618840e'
+  STORAGE_ALLOWED_LOCATIONS = ('azure://adlsgen2snowflakepoc2.blob.core.windows.net/raw-data/');
+
+--Grant Snowflake Access to the Storage Locations
+DESC STORAGE INTEGRATION Azr_intigration;
+
+
+CREATE OR REPLACE FILE FORMAT parquet_format
+  TYPE = parquet;
+
+
+
+
+--Create an External Stage
+create or replace stage azure_stage1 
+STORAGE_INTEGRATION = Azr_intigration
+url='azure://adlsgen2snowflakepoc2.blob.core.windows.net/raw-data/';
+
+list @azure_stage1;
+
+
+-- Configure Snowflake to read the generated manifests
+--Define an external table on the manifest files
+--delta_manifest_table that reads the file names specified in the manifest files
+
+CREATE OR REPLACE EXTERNAL TABLE delta_manifest_table(
+   filename VARCHAR AS split_part(VALUE:c1, '/', -1)
+  )
+  WITH LOCATION = @azure_stage1/_symlink_format_manifest/
+  FILE_FORMAT = (TYPE = CSV)
+  PATTERN = '.*[/]manifest'
+  AUTO_REFRESH = true;
+
+  
+select filename from delta_manifest_table;
+
+  list @azure_stage1/_symlink_format_manifest/;
+
+  --Define an external table on Parquet files
+  CREATE OR REPLACE EXTERNAL TABLE my_parquet_data_customer(
+    id STRING AS (VALUE:ID::STRING),
+    Name STRING AS (VALUE:Name::STRING),
+    Address STRING AS (VALUE:Address::STRING),
+    City STRING AS (VALUE:City::STRING),
+    PostCode INT AS (VALUE:PostCode::INT),
+    State STRING AS (VALUE:State::STRING),
+    Company STRING AS (VALUE:Company::STRING),
+    Contact STRING AS (VALUE:Contact::STRING),
+    parquet_filename VARCHAR AS split_part(metadata$filename, '/', -1)
+  )
+  WITH LOCATION = @azure_stage1
+  FILE_FORMAT = (TYPE = PARQUET)
+ -- PATTERN = '.*[/]part-[^/]*[.]parquet'
+  AUTO_REFRESH = true;
+  
+  select * from my_parquet_data_customer
+  
+--Define view to get correct contents of the Delta table using the manifest table
+  CREATE OR REPLACE VIEW delta_customer AS
+    SELECT id,
+    Name,
+    Address,
+    City,
+    PostCode,
+    State,
+    Company,
+    Contact
+    FROM my_parquet_data_customer
+    WHERE parquet_filename IN (SELECT filename FROM delta_manifest_table);
+
+    select *from delta_customer
+
+    --delete,append,delete in 2nd,delete in both,update in both
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   

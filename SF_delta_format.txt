@@ -1,0 +1,30 @@
+--Create an External Stage
+create or replace stage azure_stage_df 
+STORAGE_INTEGRATION = Azr_intigration
+url='azure://adlsgen2snowflakepoc2.blob.core.windows.net/raw-data/delta_format/';
+
+  CREATE OR REPLACE EXTERNAL TABLE DF_customer(
+    id STRING AS (VALUE:ID::STRING),
+    Name STRING AS (VALUE:Name::STRING),
+    Address STRING AS (VALUE:Address::STRING),
+    City STRING AS (VALUE:City::STRING),
+    PostCode INT AS (VALUE:PostCode::INT),
+    State STRING AS (VALUE:State::STRING),
+    Company STRING AS (VALUE:Company::STRING),
+    Contact STRING AS (VALUE:Contact::STRING)
+  )
+  WITH LOCATION = @azure_stage_df/
+  FILE_FORMAT = (TYPE = PARQUET)
+ -- PATTERN = '.*[/]part-[^/]*[.]parquet'
+  TABLE_FORMAT = DELTA
+  AUTO_REFRESH = false
+  REFRESH_ON_CREATE = false;
+  
+  desc table DF_customer
+
+  select * from DF_customer where state='TAS';
+  
+  alter external table DF_customer refresh;
+  
+
+
